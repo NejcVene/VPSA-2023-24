@@ -21,7 +21,8 @@ int pthread_create(pthread_t *restrict thread,
   netipiziran kazalec in vrne netipiziran kazalec. Torej moramo podati
   naslov funckije, ki ustreza temu (da vrne void pointer in vzame void pointer).
   Funkcija create bo, torej na nek način klicala to funkcijo, ki jo mi podamo.
-- void *restrict arg je še en netipiziran kazalec, ki je sicer struktura (struct) niti
+- void *restrict arg je še en netipiziran kazalec, ki je sicer struktura (struct) niti. Tole bomo
+  uporabljali za pošiljanje argumentov.
 */
 
 /*
@@ -42,11 +43,14 @@ argumenti_t args1, args2;
 
 int main(void) {
 
-    args1.thread_id = 1;
 
+    args1.thread_id = 1;
     // kreiramo niti
-    pthread_create(&nit1, NULL, funkcija_niti, NULL);
-    pthread_create(&nit2, NULL, funkcija_niti, NULL);
+    // edini argument je navaden void naslov (kot to zahteva funkcija), zazo mora naslov na strukturo args1
+    // pretvoriti v naslov za navaden void naslov.
+    pthread_create(&nit1, NULL, funkcija_niti, (void *) &args1);
+    args2.thread_id = 2;
+    pthread_create(&nit2, NULL, funkcija_niti, (void *) &args2);
 
     // počakamo, da se niti zaključita
     pthread_join(nit1, NULL);
@@ -58,11 +62,14 @@ int main(void) {
 
 }
 
-void* funkcija_niti1(void* arg) {
+void* funkcija_niti(void *arg) {
 
-  if (arg->thread_id == 1) {
+  // za dostop do elementov je navaden void naslov, zato moramo
+  // definirati nov kazalec na strukturo in ga pretovirit v ta tip.
+  argumenti_t *argumenti = (argumenti_t *) arg;
+  if (argumenti->thread_id == 1) {
     printf("Sem nit1\n");
-  } else {
+  } else if (argumenti->thread_id == 2) {
     printf("Sem nit2\n");
   }
 
