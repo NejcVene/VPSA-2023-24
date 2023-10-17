@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <pthread.h> // knjižnica, ki ima vse za delo s niti
 
+// https://man7.org/linux/man-pages/man3/pthread_create.3.htmls
+
 /*
 void* (*neka_funkcija)(int *)
 */
