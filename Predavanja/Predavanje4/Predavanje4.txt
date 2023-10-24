@@ -13,3 +13,11 @@ Sintaksa:
 Prevajamo tako, da linkamo s OpenMP: 
     gcc -fopenmp prvi prvi.c
 Ko se zaključi paralelna sekcija se vse niti združijo nazaj v eno.
+
+private() problematične spremenjive, naredi privatne za vsako nit
+spremenjive NE vrača!
+
+Kako zaklepamo:
+    Lahko zaklepamo z dvema navodiloma, in sicer critical ter atomic.
+    critical -->
+    atomic -->
