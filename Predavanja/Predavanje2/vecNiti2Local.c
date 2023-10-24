@@ -9,12 +9,14 @@ void* funkcija_niti(void *);
 
 typedef struct {
     unsigned int thread_id;
-    float *vecStripA, *vecStripB, *vecStripC;  
+    float *vecStripA, *vecStripB, *vecStripC, *localSum;  
 } argumenti_t;
 
 pthread_t niti[NUM_OF_THREADS];
 argumenti_t argumenti[NUM_OF_THREADS];
 float rezultat = 0.0;
+// array za hranjenje delnih vsot od niti
+float delneVsote[NUM_OF_THREADS];
 
 // tale more bit obvezno globalna
 pthread_mutex_t kljucavnica;
@@ -39,11 +41,16 @@ int main(void) {
       argumenti[i].vecStripA = vecA + i * (NUM_OF_ELEMENTS / NUM_OF_THREADS);
       argumenti[i].vecStripB = vecB + i * (NUM_OF_ELEMENTS / NUM_OF_THREADS);
       argumenti[i].vecStripC = vecC + i * (NUM_OF_ELEMENTS / NUM_OF_THREADS);
+      argumenti[i].localSum = &delneVsote[i];
       pthread_create(&niti[i], NULL, funkcija_niti, (void *) &argumenti[i]);
     }
 
     for (int i = 0; i<NUM_OF_THREADS; i++) {
       pthread_join(niti[i], NULL);
+    }
+
+    for (int i = 0; i<NUM_OF_THREADS; i++) {
+      rezultat += delneVsote[i];
     }
 
     // sedaj se še rezultat hitreje preveri
@@ -66,9 +73,7 @@ void* funkcija_niti(void *arg) {
   for (int i = 0; i<NUM_OF_ELEMENTS/NUM_OF_THREADS; i++) {
     // seštejemo vektorja (seštevamo istoležne elemente, ker tako dela seštevanje vektorjev)
     argumenti->vecStripC[i] = argumenti->vecStripA[i] + argumenti->vecStripB[i];
-    pthread_mutex_lock(&kljucavnica); // lock
-    rezultat += argumenti->vecStripC[i];
-    pthread_mutex_unlock(&kljucavnica); // unlock
+    *(argumenti->localSum) += argumenti->vecStripC[i]; // seštej delne rezultate
   }
 
 }
