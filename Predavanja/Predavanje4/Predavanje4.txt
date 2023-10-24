@@ -1,0 +1,15 @@
+Nitenje z OpenMP
+
+To je manj knjižnica in bolj navodila prevajalniku, kar pomeni
+da nam olajša delo, saj samo dajemo navodila in nam ni potrebo
+ustvarjati (eksplicitno) niti, funkcije niti, prenos argumentov
+k niti ...
+Ta vmesnik ustvarja t.i. paralelna območja. To območje je del kode, ki
+ga bodo izvedle vse niti.
+
+Sintaksa:
+    Vsa navodila prevajalniku se začenjo s #pragma omp
+    Dodati jo moramo s #include <omp.h>
+Prevajamo tako, da linkamo s OpenMP: 
+    gcc -fopenmp prvi prvi.c
+Ko se zaključi paralelna sekcija se vse niti združijo nazaj v eno.
