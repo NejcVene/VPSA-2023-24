@@ -1,0 +1,22 @@
+4 Niti, pri katerem vse delajo sodi, nato pa lihi korak.
+Problem je sedaj, da bodo niti šle naprej in ne čakale na druge da končajo.
+Potrebujemo prepreko (barrier):
+    točka na kateri se morajo niti počakati oz. točka
+    ki jo morajo doseči vse niti predenj lahko
+    nadaljujejo s delom.
+    Uporabimo lahko:
+        1. Deklariramo
+        2. Inicializiramo
+        3. Povemo koliko niti mora jo doseči predenj gre lahko naprej
+         (n / 2 niti mora pridi do barrierre predenj gre naprej)
+
+
+        - pthread_barrier_init()
+        - wait
+        - destroy
+
+Vsaki niti bomo povedali kateri del seznama ureja.
+Za dve niti gre vsaka nit do polovice.
+Za štiri niti gre do četrtine seznama.
+Torej glede na id niti se bo povedal kjer se bo ta izvajala.
+nato pognali sodi in nato lihi prehod.
