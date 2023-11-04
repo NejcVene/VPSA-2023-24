@@ -20,7 +20,7 @@
 #include <time.h>
 #include <stdbool.h>
 
-#define N 300000
+#define N 10
 #define T 8
 
 #define err(msg) { fprintf(stderr, "Error: %s\n", msg); exit(1); }
@@ -28,7 +28,9 @@
 void createNumbers(int *);
 void printArray(int *);
 void *evenOddSort(void *); // apperenty this is also known as Brick sort
-void compareAndSwap(int *, int *);
+bool compareAndSwap(int *, int *);
+
+struct timespec timeStart, timeEnd;
 
 typedef struct {
     uint32_t threadID,
@@ -41,6 +43,7 @@ pthread_barrier_t barrier;
 
 int even = 1;
 int numbers[N];
+bool changedMade[T] = {false};
 
 bool is_sorted() {
     int prev = numbers[0];
@@ -57,9 +60,11 @@ int main(int argc, char **argv) {
     threadArgs threads[T];
 
     createNumbers(numbers);
-    // printArray(numbers);
+    printArray(numbers);
 
     pthread_barrier_init(&barrier, NULL, T);
+
+    clock_gettime(CLOCK_REALTIME, &timeStart);
 
     for (int i = 0; i<T; i++) {
         threads[i].threadID = i;
@@ -76,6 +81,11 @@ int main(int argc, char **argv) {
         pthread_join(threads[i].thread, NULL);
     }
 
+    clock_gettime(CLOCK_REALTIME, &timeEnd);
+    double elapsed_time = (timeEnd.tv_sec - timeStart.tv_sec) + (timeEnd.tv_nsec - timeStart.tv_nsec) / 1e9;
+
+    pthread_barrier_destroy(&barrier);
+
     printf("Result\n");
     // printArray(numbers);
     if (is_sorted()) {
@@ -84,8 +94,7 @@ int main(int argc, char **argv) {
         printf("Stevilke niso urejene pravilno! :(");
     }
     printf("\n");
-
-    pthread_barrier_destroy(&barrier);
+    printf("Čas izvajanja: %f sekund \n", elapsed_time);
 
     return 0;
 
@@ -113,34 +122,38 @@ void *evenOddSort(void *args) {
 
     int index;
     threadArgs *values = (threadArgs *) args;
+    // changedMade[values->threadID] = false;
     // printf("ID: %d StartIndex: %d EndIndex: %d\n", values->threadID, values->startIndex, values->step);
     // printf("Pozdrav s niti %d\n", values->threadID);
     for (int i = 0; i<=N; i++) {
         // printf("Sorting is %s\n", even ? "Even" : "Odd");
         // printf("RUNNING THREAD: %d\n", values->threadID);
-        if (even) { // even sort
-            for (int j = 0; j<values->step; j++) {
-                index = (values->startIndex + (i % 2)) + j * 2;
-                // printf("Index: %d\n", index);
-                compareAndSwap(&numbers[index], &numbers[index + 1]);
-            }
-        } else { // odd sort
-            for (int j = 0; j<values->step; j++) {
-                index = (values->startIndex + (i % 2)) + j * 2;
-                // printf("Index: %d\n", index);
-                compareAndSwap(&numbers[index], &numbers[index + 1]);
+        for (int j = 0; j<values->step; j++) {
+            index = (values->startIndex + (i % 2)) + j * 2;
+            // printf("Index: %d\n", index);
+            changedMade[values->threadID] = compareAndSwap(&numbers[index], &numbers[index + 1]);
+        }
+        printf("Tread %d made changes? %s\n", values->threadID, changedMade[values->threadID] ? "True" : "False");
+        printArray(numbers);
+        pthread_barrier_wait(&barrier);
+
+        bool isChange = false;
+        for (int j = 0; j<T; j++) {
+            if (changedMade[j]) {
+                isChange = true;
+                break;
             }
         }
-        even = !even;
-        // printArray(numbers);
-        pthread_barrier_wait(&barrier);
-    }
 
-    return NULL;
+        if (!isChange) {
+            return NULL;
+        }
+
+    }
 
 }
 
-void compareAndSwap(int *a, int *b) {
+bool compareAndSwap(int *a, int *b) {
 
     // printf("COMPARING: %d %d\n", *a, *b);
     int tmp;
@@ -148,6 +161,8 @@ void compareAndSwap(int *a, int *b) {
         tmp = *a;
         *a = *b;
         *b = tmp;
+        return true;
     }
+    return false;
 
 }
