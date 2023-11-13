@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
+#include <time.h>
 
 #define N_ELEMENTS 1024 * 1024 * 32
 #define N_THREADS 12
+
+struct timespec timeStart, timeEnd;
 
 float *pVecA;
 float *pVecB;
@@ -16,6 +19,8 @@ int main(void) {
     pVecB = (float*) malloc(N_ELEMENTS * sizeof(float));
     
     // omp_set_num_threads(4);
+
+    clock_gettime(CLOCK_REALTIME, &timeStart);
 
     // zapisi vrednosti za vektorja
 #pragma omp parallel for // parallelno izvedi zanko
@@ -31,7 +36,11 @@ int main(void) {
         dp = dp + (*(pVecA + i) * pVecB[i]);
     }
 
+    clock_gettime(CLOCK_REALTIME, &timeEnd);
+    double timeTaken = (timeEnd.tv_sec - timeStart.tv_sec) + (timeEnd.tv_nsec - timeStart.tv_nsec) / 1e9;
+
     printf("Skalarni produkt je: %f\n", dp / 1024.0f); // tole je isto kakor: dp / (float) 1024.0f
+    printf("Time taken to calculate DP: %f seconds\n", timeTaken);
 
     return 0;
 

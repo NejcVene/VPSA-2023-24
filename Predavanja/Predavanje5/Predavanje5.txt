@@ -1,0 +1,68 @@
+Začeli smo s OpenMP.
+Ta ustvarja dele v kodi, ki se izvajajo
+paralelno. To naredimo tako, da v kodi
+označimo tisto kar želimo, da se izvede
+paralelno preko ukazov prevajalniku
+#pragma omp ...
+
+Kritičnam sekcijam se je dobro izogibati, saj
+se program dlje časa izvaja. Poudarek je na tem, da je
+pohitrutev oz. upočasnitev 100-kratna. Namesto tega
+je boljše, da uporabimo lastne spremenjivke:
+    npr. #pragma omp parallel for reduction(+:dp)
+Lahko upirabimo tudi atomične operacije, vendar podpira
+samo osnovne matematične operacije (+, -) (za * ne vem, niti /).
+#pragma omp atomic.
+Kaj pa redukcija?
+    Razdelimo polje na polovico, in nato seštevamo skupaj
+    _________________________________
+    | | | | | | | | | | | | | | | | |
+     1 2 3 4 5 6 7 8|1 2 3 4 5 6 7 8
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    1 + 1 = 1
+    2 + 2 = 2
+    3 + 3 = 3
+    4 + 4 = 4
+    5 + 5 = 5
+    6 + 6 = 6
+    7 + 7 = 7
+    8 + 8 = 8
+    __________________________________
+    | | | | | | | | | | | | | | | | |
+     1 2 3 4|1 2 3 4|
+    Sedaj to polje zopet razdelimo na pol:
+    1 + 1 = 1
+    2 + 2 = 2
+    3 + 3 = 3
+    4 + 4 = 4
+    __________________________________
+    | | | | | | | | | | | | | | | | |
+     1 2|1 2
+    Sedaj to polje zopet delimo na pol:
+    1 + 1 = 1
+    2 + 2 = 2
+    __________________________________
+    | | | | | | | | | | | | | | | | |
+     1|1
+    Sedaj ko smo zopet delili na pol, še zadnja dva elementa seštejemo
+    in tako dobimo končni rezultat:
+    1 + 1 = 1
+    __________________________________
+    | | | | | | | | | | | | | | | | |
+     1
+    Vidimo, da smo za seštevanje 16 el. naredili 4 korake.
+    Za 32, bi jih 5
+    Za 64, bi jih 6
+    Torej, gre po logaritmu.
+    Za N = 2^20 * 2^6 = 64M, potrebujemo le 26 korakov.
+    OpenMP zna sam generirati kodo za redukcijo. Pri GPU bomo morali to napisati sami.
+    #pragma omp parallel for reduction(+:dp)
+                                       ^ seštevaj in shrani v dp.
+
+Zgled: računanje števila π.
+       Krožnica, za katero predpodstavimo, da je njejo središče v (0, 0).
+       r = π
+       P = r^2π = π
+       y = sqrt(1 - x^2) <- preko te enačbe znamo za poljubnen x znoraj krožnice izračunati njen y.
+       V eni for zanki gremo po x-u in v vsaki interaciji izračunali y, ki ga pa bomo množili
+       s intervalom. Vsota tega bi morala biti π.

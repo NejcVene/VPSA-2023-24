@@ -1,1 +1,9 @@
 Man pages online: https://man7.org/linux/man-pages/
+
+Merjenje časa:
+    #include <time.h>
+    struct timespec timeStart, timeEnd;
+    clock_gettime(CLOCK_REALTIME, &timeStart);
+    clock_gettime(CLOCK_REALTIME, &timeEnd);
+    double timeTaken = (timeEnd.tv_sec - timeStart.tv_sec) + (timeEnd.tv_nsec - timeStart.tv_nsec) / 1e9;
+    printf("Time taken: %f seconds\n", timeTaken);
