@@ -1,0 +1,50 @@
+Razvščanje interacij paralelne for zanke:
+    1. Static -> je privzeti način. Kadar koli ustvarimo
+       paralelno znako s #omp parallel for schedule(static)
+       vsaka nit dobi isto število iteracij, če je deljivo, sicer
+       zandja nit dobi nekaj iteracij več.
+       Npr. 4 niti:
+            Thread0 -> N/4 iteracij
+            Thread1 -> N/4 iteracij
+            Thread2 -> N/4 iteracij
+            Thread3 -> N/4 iteracij
+        Vsaka dobi četrtino operacij.
+    
+    2. Dinamično (dynamic) -> uporabimo s #omp paraller for schedule(dynamic, M)
+       V tem primeru vsaka nit vzame M interacij in jih izvede. Nato vzame
+       najslednjih M iteracij in jih izvede -> to ponavlja doker
+       ne pride do konca iteracijskega prostora.
+
+       Če se v vsaki iteraciji opravi enaka količina dela, potem se ta način
+       smisleno ne razlikuje od statičnega (prejšnjega). Vseeno se pa razlikuje
+       v lokalnosti pomničniških dostopov. Dinamično izgublja pomnilniško lokalnost, ker jih
+       drobi v manjše skupine.
+
+       Če pa je količina dela v iteracijah ni enaka, npr. da je količina dela
+       pri i-ti iteraciji večja kot v i - 1-ti iteraciji, potem je
+       dinamično razvrščanje boljše.
+
+Zgled: Prijateljska števila
+    Npr. števili 220 in 284 sta prvi takšni števeili med naravnimi števili.
+    220: 1, 2, 4, 5, 10, 11, 20, 22, 44, 55, 110 <- delitelji števila 220. Vsota je 284.
+    Vidimo, da čez plovico vrednosti ne more iti. Vsota je 220.
+    284: 1, 2, 4, 71, 142
+
+    Kako se tega lotimo?
+        Serijska implementacija:
+            Za število x:
+                vsota = 0
+                for (i = 1 ... x / 2):
+                    če je x % i == 0:
+                        vsota += i
+    
+    x = 28: 1 28
+            2 14 (če je deljiv s 2 je tudi deljiv s 14)
+            4 7
+            Zadošča, da preverjamo le do sqrt(x), pri čemer moramo iskati obe števili.
+            vsota = 0
+            for (i = 1 ... sqrt(x))
+                če x / i:
+                    // prištejemo levi in desni stoplec
+                    vsota += i
+                    vsota += x / i
