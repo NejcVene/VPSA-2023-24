@@ -48,3 +48,11 @@ Zgled: Prijateljska števila
                     // prištejemo levi in desni stoplec
                     vsota += i
                     vsota += x / i
+    
+    Boljša implementacija:
+        1. Najprej bomo za vsa števila v obsegu 1 do N izračunali
+           vsoto njihovih deliteljev. To bomo shranili v linearni seznam:
+            seznam[1] = vsota deljiteljev za število 1
+            seznam[2] = vsota deljiteljev za število 2
+            seznam[i] = vsota deljiteljev za število i
+    
