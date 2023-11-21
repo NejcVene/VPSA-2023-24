@@ -53,5 +53,35 @@ Programski vidik GPE:
        Možno je, da je število blokov > število CU (to je zaželjeno, da se naredi, ker
        če nek CU v bloku, ki ga izvaja ne najde nobenega snopa, ki je pripravljen na izvajanje
        bo vzel nov blok v izvajanje. Zato je dobro, da ima CU več blokov na izbiro).
+    2. Pomnilniška hierarhija:
        
+Velikost mreže: M (število blokov)
+Velikost bloka: B (število niti v bloku)
 
+Niti pri GPU nimajo globalnega indeksa, vendar niti imajo indeks če znotraj bloka:
+    blok 0: nit 0 v blok 0
+    blok 1: nit 0 v blok 1
+    blok n: nit 0 v blok n
+
+Kateri element obdeluje nit 2 v bloku 2?
+    indeks bloka * velikost bloka + indeks niti v bloku
+
+Primer: seštevanje vektorjev
+    Koliko niti bomo uporabili? Odvisno od velikosti problema:
+        npr. vektor je dolg T - 1 elementov. Blok je velikost B (to ni bajt!).
+             Blokov je M. M = T / B (število blokov) <- mreža niti oz. blokov (grid).
+             Cilj: da je M > števila CU.
+                   da je B > k * 32, k >= 4 (zato, da bo več snopov v bloku).
+    Naivno seštevanje vektorjev:
+        Nit i naj sešteje le i-to istoležna elementa.
+
+
+cudaGetDeviceCount(int *) vrne koliko naprav podpira CUDA
+cudaGetDeviceProperties(struct *cudaDeviceProp, int) zapiše v strukturo lastnosti naprave, ki podpira CUDA
+cudaDeviceGetAttribute() vrne izvajalni mode
+
+Kako prevedit program:
+    1. V direktorij programa
+    2. module load CUDA
+    3. nvcc -o program.cu program
+    4. srun --partition=gpu --ntasks=1 --gpus=1 program
