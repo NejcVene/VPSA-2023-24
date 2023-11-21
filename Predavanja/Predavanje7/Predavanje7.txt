@@ -1,5 +1,3 @@
-TPO: povej motivacijo, aktivnosti (časovni načrt), kako smo razporedili delo.
-
 Anatomija GPE:
     Dekodiranje ukaza -> podati operande va vhod tretje stopnje (EX).
                          Pomeni, prebrati iz registrov in poslati na vhod EX.
