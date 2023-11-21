@@ -26,4 +26,32 @@ Primer: Kepler K40
     Celotna Kepler K40 GPU ima 15 compute unitov (15 * 192 = 2880 procesnih elementov).
     Lahko izvede 2880 aritmetičnih operacij naenkrat.
 
-GPU, ki ga uporabljamo mi je
+GPU, ki ga uporabljamo mi je Volta:
+    64 int PE
+    Tensor core -> posebna vrsta ALE, ki dela množenje vektorjev.
+    
+    Ima 6 particij. Vsaka particija ima 14 CU/particija.
+    Ima 6 * 14 * 64 PE = 5376 (toliko operacij lahko naenkrat izvede).
+
+=================================================================================
+
+Programski vidik GPE:
+    1. Izvajalni model:
+       Pove, kako se bodo programi izvajali. Kot veliko število niti.
+       Funkcijo, ko jo zaženemo na GPU se reče "ščepec oz. kernel".
+       Vsak ščepec izvaja N niti (N >> 1000). Te niti so grupirane v skupine, ki
+       jim pravimo bloki. Niti iz istega bloka se izvajajo na eni sami računski enoti oz. CU.
+       Niti znotraj bloka, ker se izvajajo na isti računski enkoti (CU), lahko komunicirajo
+       (izmenjujejo podatke preko skupnega pomnilnika) in se lahko sinhronizirajo.
+       Niti znotraj istega bloka se delijo/grupirajo v skupke, po 32 niti -> tej 32 niti
+       imajo vedno zaporedne indekse (tem nitim rečemo snop oz. warp).
+       Snop niti predstavlja minimalno število niti, ki se naenkrat izvede (minimalna granulacija).
+       Naenkrat izvede -> vse niti v snopu izvedejo isti ukaz.
+       CU ima 4 razvrščevalnike snopov, torej CU lahko naenkrat izvede 4 * 32 niti oz. ALE ukazov.
+
+       Bloki in snopi se razvrščajo popolnoma nedovisno.
+       Možno je, da je število blokov > število CU (to je zaželjeno, da se naredi, ker
+       če nek CU v bloku, ki ga izvaja ne najde nobenega snopa, ki je pripravljen na izvajanje
+       bo vzel nov blok v izvajanje. Zato je dobro, da ima CU več blokov na izbiro).
+       
+
