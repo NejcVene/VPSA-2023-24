@@ -1,0 +1,31 @@
+TPO: povej motivacijo, aktivnosti (časovni načrt), kako smo razporedili delo.
+
+Anatomija GPE:
+    Dekodiranje ukaza -> podati operande va vhod tretje stopnje (EX).
+                         Pomeni, prebrati iz registrov in poslati na vhod EX.
+    Operande prebere iz registrov in rezultat shrani v registre.
+
+    Lahko imamo več ALE (EX) in vsi ti bodo obdelali del podatkov npr. en po 8, drugi po 4 ...
+    Potem bi vsak ALE 16-krat izvedel zanko. Takemu procesroju rečemo "računska enota oz. compute unit oz. streaming multiprorcessor".
+    Eni ALE pa rečemo temu "procesing element oz. streaming processor/core".
+
+    Lahko to naredimo še hitreje, da vsak ALE izvede samo eno iteracijo zanke. Potem rabimo 128 ALE enot
+    in zanke sploh ne potrebujemo več - vsak sešteje tista dva elementa, ki se nahajata na istem indexu
+    kot je index te ALE. Temu skupaj pa lahko rečemo GPU.
+    Ker je veliko jeder (procesnih elementov), takšnim arhitekturam rečemo "mnogo jederna arhitekutra oz. many core".
+
+Primer: Kepler K40
+    Ima 192 CU, torej lahko naredi 192 iteracij ene zanke naenkrat.
+    Poleg teh 192 jeder, ima tudi 64 double precision floating point PE.
+    32 load/store enot.
+    64 KB skupnega pomnilnika (da si lahko teh 192 procesnih elementov deli podatke). Deluje lahko
+    tudi kot L1 cache (predpomnilnik).
+    64 K 32 bitnih registrov. Zakaj jih sploh toliko rabimo?
+    Dispatch unit -> lahko izstavi naenkrat 8 različnih ukazov.
+    Warp scheduler ->
+    Tex -> operacije za strukture (tega se nas ne tiče).
+
+    Celotna Kepler K40 GPU ima 15 compute unitov (15 * 192 = 2880 procesnih elementov).
+    Lahko izvede 2880 aritmetičnih operacij naenkrat.
+
+GPU, ki ga uporabljamo mi je
