@@ -1,0 +1,5 @@
+Ugotoviti je potrebno, kateri del vektorja bo obdelovala
+posamezna nit.
+Kateri element v vekotrju obdeluje nit N?
+    index bloka * velikost bloka + index niti v bloku (N)
+    
