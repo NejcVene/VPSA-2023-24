@@ -1,0 +1,8 @@
+Vhod: slika velikosti N x M, L barv, pri čemer so slike sivinske (en kanal).
+1. Izračun histograma
+   Posamezna vrednost pove kolikokrat se posamezna barva pojavi
+   koliko pikslov ima določeno barvo.
+2. Komulativna ditribucija
+3. Izenačitev histograma
+   
+
