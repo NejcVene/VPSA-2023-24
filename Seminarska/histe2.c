@@ -10,20 +10,26 @@
 #define GRAYLEVELS 256
 #define DESIRED_NCHANNELS 1
 
+#define err(msg, reason) { fprintf(stderr, "Error: %s %s\n", msg, reason); exit(1); }
+
 void CalculateHistogram(unsigned char* image, int width, int height, unsigned long* histogram);
 void CalculateCDF(unsigned long* histogram, unsigned long* cdf);
 void Equalize(unsigned char * image_in, unsigned char * image_out, int width, int height, unsigned long* cdf);
 unsigned char Scale(unsigned long cdf, unsigned long cdfmin, unsigned long imageSize);
 unsigned long findMin(unsigned long* cdf);
 
-int main(void) {
+int main(int argc, char **argv) {
+
+    if (argc < 2) {
+        err("To few arguments", "Usage: <image_in> <image_out>")
+    }
 
     // 0. Najprej naloži sliko
     // Read image from file
     int width, height, cpp;
     // read only DESIRED_NCHANNELS channels from the input image:
     // prebere sliko, pove njene dimenizije, pa zadeve o barvih
-    unsigned char *imageIn = stbi_load("s_kolesar-neq.jpg", &width, &height, &cpp, DESIRED_NCHANNELS);
+    unsigned char *imageIn = stbi_load(argv[1], &width, &height, &cpp, DESIRED_NCHANNELS);
     if(imageIn == NULL) {
         printf("Error in loading the image\n");
         return 1;
@@ -50,7 +56,7 @@ int main(void) {
     // 3. Poračunaj nove barve po tisti formuli
     Equalize(imageIn, imageOut, width, height, CDF);
 
-    stbi_write_jpg("out.jpg", width, height, DESIRED_NCHANNELS, imageOut, 100);
+    stbi_write_jpg(argv[2], width, height, DESIRED_NCHANNELS, imageOut, 100);
 
 
     //Free memory
@@ -79,6 +85,17 @@ void CalculateHistogram(unsigned char* image, int width, int height, unsigned lo
             histogram[image[i*width + j]]++;
         }
     }
+
+    int sumOfPixles = 0;
+    printf("GRAYLEVELS: %d\n", GRAYLEVELS);
+    // print some histo. values for testing
+    for (int i = 0; i<GRAYLEVELS; i++) {
+        sumOfPixles += histogram[i];
+        printf("Color %d has %ld pixels\n", i, histogram[i]);
+    }
+    printf("Sum of pixels: %d\nHEIGHT x WIDTH %d\nSAME: %d\n\n", 
+            sumOfPixles, height * width, sumOfPixles == height * width);
+
     /*
     V CUDA je tole treba narediti atomično
     Namig: Cuda by example.
