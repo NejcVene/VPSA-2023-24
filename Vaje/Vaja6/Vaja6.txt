@@ -1,0 +1,9 @@
+Histogram slike
+
+hist[img[i * j]]++
+
+Uporaba atomičnih operacij, ker bi lahko vse niti pisale na isto pozicijo.
+(CUDA docs. 9.4, str. 179)
+
+Vsak blok niti dela svoj histogram. Ko ga zaključijo ga po blokih prištejejo
+k glavnemu bloku (tudi antomična operacija).
