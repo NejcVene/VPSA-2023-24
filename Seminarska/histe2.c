@@ -125,6 +125,12 @@ void CalculateCDF(unsigned long* histogram, unsigned long* cdf){
         // to je znano kot prefix sum
         // kak zdej to naredit bolj učinkovito (to je na tistem linku)
     }
+
+    printf("CDF:\n");
+    for (int i = 0; i<GRAYLEVELS; i++) {
+        printf("How many px have color %d? %ld\n", i, cdf[i]);
+    }
+
 }
 
 void Equalize(unsigned char * image_in, unsigned char * image_out, int width, int height, unsigned long* cdf){
@@ -132,6 +138,8 @@ void Equalize(unsigned char * image_in, unsigned char * image_out, int width, in
     unsigned long imageSize = width * height;
     
     unsigned long cdfmin = findMin(cdf);
+
+    printf("\nMIN IS: %ld\n", cdfmin);
     
     //Equalize: namig: blok niti naj si CDF naloži v skupni pomnilnik
     // pojdi čez sliko in računaj piksle
