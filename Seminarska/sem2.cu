@@ -30,3 +30,43 @@ void histo() {
 } // block size je 256, gridSize je ceil(width / blockSIze.x), ceil(height(blockSIze.y))
 // histograma ni potrebno iz gpu nesti nazaj na cpu (ostane na gpu)
 // --mem-pec-cpu=32G
+
+void cdf() {
+
+    // dela le 1 blok z 256 niti
+    // vse niti preberejo gloabni histo v lokalnega, zato da bodo
+    // delale s lokalnim spominom
+
+    // vsaka nit
+    // for (d = 1; d<8; d*=2) {
+    //      histOut[tid] = histIN[tid] + histIN[tid - d];
+    // }
+
+    // vse pišejo nazaj v glavni pomn.
+
+    __shared__ unsigned int temp[GRAY_LEVELS * 2];
+    int tid = threadIdx.x;
+    int pout = 0, pin = 1;
+    temp[tid] = histogram[tid];
+    __syncthreads();
+    for (int offset = 1; offset< GRAY_LEVELS; offset <<= 1) {
+        pout = 1 - pout;
+        pin = 1 - pout;
+        if (tid >= offset) {
+            temp[pout * GRAY_LEVELS + tid] = temp[pin * GRAY_LEVELS + tid] + temp[pin * GRAY_LEVELS + tid - offset];
+        } else {
+            temp[]
+        }
+    }
+
+    // koliko seštevanj?
+    // offset = 1 | 255 seštevanj
+    // offset = 2 | 254 seštevanj
+    // offset = 4 | 252
+    // offset = 8 | 248
+    // offset = 16 | 240
+    // offset = 32 | 224
+    // offset = 64 | 192
+    // offset = 128 | 128
+    // sum:         | 1794 O(n * lg(n))
+}
