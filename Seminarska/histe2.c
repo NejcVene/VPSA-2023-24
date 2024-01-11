@@ -145,6 +145,7 @@ void Equalize(unsigned char * image_in, unsigned char * image_out, int width, in
     // pojdi čez sliko in računaj piksle
     for (int i=0; i<height; i++) {
         for (int j=0; j<width; j++) {
+            // printf("%d\n", Scale(cdf[image_in[i*width + j]], cdfmin, imageSize));
             image_out[(i*width + j)] = Scale(cdf[image_in[i*width + j]], cdfmin, imageSize);
         }
         // scale je tista formula
