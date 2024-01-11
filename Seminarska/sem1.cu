@@ -14,23 +14,54 @@
 #define BLOCK_SIZE 1024
 
 // calculate histogram
-__global__ void calculateHistogram(unsigned char *image, int imageSize, unsigned int *histogram) {
+__global__ void calculateHistogram(unsigned char *image, int width, int height, unsigned int *histogram) {
 
-    int threadID = threadIdx.x + blockIdx.x * blockDim.x;
-    int stride = blockDim.x * gridDim.x;
+    int x = blockIdx.x * blockDim.x + threadIdx.x,
+        y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int localX = threadIdx.x,
+        localY = threadIdx.y;
     
-    while (threadID < imageSize) {
-        atomicAdd(&(histogram[image[threadID]]), 1);
-        threadID += stride;
-    }
+    __shared__ unsigned int localHisto[GRAY_LEVELS];
 
+    localHisto[blockDim.x * localY + localX] = 0;
+    __syncthreads();
+
+    if (x < width && y < height) {
+        atomicAdd(&localHisto[image[y * width + x]], 1);
+    }
+    __syncthreads();
+
+    atomicAdd(&(histogram[blockDim.x * localY + localX]), localHisto[blockDim.x * localY + localX]);
 
 }
 
-/*
-__global__ void parallelPrefixSum() {}
-*/
+__global__ void parallelPrefixSum(unsigned int *histogram, unsigned int *cdf) {
 
+    __shared__ unsigned int tmp[GRAY_LEVELS * 2];
+    int threadID = threadIdx.x,
+        pout = 0,
+        pin = 1;
+    
+    tmp[threadID] = histogram[threadID];
+    __syncthreads();
+
+    for (int offset = 1; offset<GRAY_LEVELS; offset<<=1) {
+        pout = 1 - pout;
+        pin = 1 - pout;
+        if (threadID >= offset) {
+            tmp[pout * GRAY_LEVELS + threadID] = tmp[pin * GRAY_LEVELS + threadID] + tmp[pin * GRAY_LEVELS + threadID - offset];
+        } else {
+            tmp[pout * GRAY_LEVELS + threadID] = tmp[pin * GRAY_LEVELS + threadID];
+        }
+        __syncthreads();
+    }
+
+    cdf[threadID] = tmp[pout * GRAY_LEVELS + threadID];
+
+}
+
+// make use of shared memory
 __global__ void calcuateMinReduction(unsigned int *cdf, unsigned int *minimum) {
 
     // extern __shared__ unsigned int sharedData[];
@@ -57,7 +88,41 @@ __global__ void calcuateMinReduction(unsigned int *cdf, unsigned int *minimum) {
 
 }
 
-__global__ void equalize() {}
+__device__ inline unsigned char scale(unsigned int cdf, unsigned int min, unsigned int imageSize) {
+
+    float scale;
+
+    scale = (float)(cdf - min) / (float)(imageSize - min);
+
+    scale = round(scale * (float)(GRAYLEVELS - 1));
+
+    return (int) scale;
+
+}
+
+__global__ void equalize(unsigned char *imageIn, unsigned char *imageOut, int width, int height, unsigned int *cdf, unsigned int cdfMin) {
+
+    int x = blockIdx.x * blockDim.x + threadIdx.x,
+        y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int localX = threadIdx.x,
+        localY = threadIdx.y;
+
+    unsigned int imageSize = width * height;
+
+    __shared__ unsigned int localCdf[GRAY_LEVELS];
+
+    localCdf[blockDim.x * localY + localX] = cdf[blockDim.x * localY + localX];
+    __syncthreads();
+
+    // unsigned int cdfMin = calcuateMinReduction(localCdf);
+
+    if (x < width && y < height) {
+        imageOut[y * width + x] = scale(localCdf[imageIn[y * width + x]], cdfMin, imageSize); // cdf, cdfMin, imageSize
+    }
+
+}
+
 
 int main(int argc, char **argv){
 
@@ -69,12 +134,12 @@ int main(int argc, char **argv){
     // host variables
     int width, height, imageSizeCuda, cpp = 1;
     unsigned char *imageIn, *imageOut;
-    unsigned int *histogram, *cdf, *minimum;
+    unsigned int *histogram, *cdf, *minimum, *newCdf;
     size_t imageSize;
 
     // device variables
-    unsigned char *imageInDevice;
-    unsigned int *histogramDevice, *cdfDevice, *minimumDevice;
+    unsigned char *imageInDevice, *imageOutDevice;
+    unsigned int *histogramDevice, *cdfDevice, *minimumDevice, *newCdfDevice, *originalCdfDevice;
 
     // load image from file
     if (!(imageIn = stbi_load(argv[1], &width, &height, &cpp, 1))) {
@@ -91,12 +156,19 @@ int main(int argc, char **argv){
     if (!(cdf = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) { // SET IT TO 0
         err("calloc", "Could not allocate memory for cdf on host")
     }
+    /*
 
-    minimum = (unsigned int *) calloc(1, sizeof(unsigned int));
+    /*
+    if (!(newCdf = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) { // SET IT TO 0
+        err("calloc", "Could not allocate memory for newCdf on host")
+    }
+    */
+
+    // minimum = (unsigned int *) calloc(1, sizeof(unsigned int));
 
     // calculate needed size of memory for image and allocate it
     imageSizeCuda = width * height * 1; // used on GPU as lenght of array
-    imageSize = width * height * 1 * sizeof(unsigned long);
+    imageSize = width * height * 1 * sizeof(unsigned int);
     if (!(imageOut = (unsigned char *) malloc(imageSize))) {
         err("malloc", "Could not allocate memory for output image on host")
     }
@@ -109,12 +181,22 @@ int main(int argc, char **argv){
     // SET IT TO ZERO!
     cudaMemset(histogramDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
     // cdf
+    
     cudaMalloc(&cdfDevice, GRAY_LEVELS * sizeof(unsigned int));
     // SET IT TO ZERO!
-    // cudaMemset(cdfDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
+    cudaMemset(cdfDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
+    /*
     // minimum
     cudaMalloc(&minimumDevice, 1 * sizeof(unsigned int));
-    // cudaMemset(minimumDevice, 0, 1 * sizeof(unsigned int));
+    cudaMemset(minimumDevice, 0, 1 * sizeof(unsigned int));
+    // newCdf
+    cudaMalloc(&newCdfDevice, GRAY_LEVELS * sizeof(unsigned int));
+    cudaMemset(newCdfDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
+    cudaMalloc(&originalCdfDevice, GRAY_LEVELS * sizeof(unsigned int));
+    // imageOut
+    cudaMalloc(&imageOutDevice, imageSize);
+    cudaMemset(imageOutDevice, 0, imageSize);
+    */
 
     // copy data to device
     // image
@@ -122,16 +204,23 @@ int main(int argc, char **argv){
     // histogram
     cudaMemcpy(histogramDevice, histogram, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
     // cdf
-    // cudaMemcpy(cdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
+    cudaMemcpy(cdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
+    // newCdf
+    // cudaMemcpy(newCdfDevice, newCdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
 
-    dim3 blockSize(256, 1, 1);
-    dim3 gridSize(1024 / 256, 1, 1);
+    dim3 blockSize(16, 16);
+    dim3 gridSize(ceil(width / blockSize.x), ceil(height / blockSize.y));
     
 
     // int gridDim = (imageSizeCuda + 1) / BLOCK_SIZE;
 
     // run calculateHistogram
-    calculateHistogram<<<gridSize,blockSize>>>(imageInDevice, imageSizeCuda, histogramDevice);
+    calculateHistogram<<<gridSize,blockSize>>>(imageInDevice, width, height, histogramDevice);
+    
+    parallelPrefixSum<<<1,GRAY_LEVELS>>>(histogramDevice, cdfDevice);
+    
+    equalize<<<gridSize,blockSize>>>(imageInDevice, imageInDevice, width, height, cdfDevice);
+
     // run parallerPrexifSum
     // run calcuateMinReduction
     // calcuateMinReduction<<<gridSize,blockSize>>>(cdfDevice, );
@@ -141,19 +230,34 @@ int main(int argc, char **argv){
     // histogram
     cudaMemcpy(histogram, histogramDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
     
+    /*
     for (int i=1; i<GRAY_LEVELS; i++) {
         cdf[i] = cdf[i-1] + histogram[i];
     }
+    */
 
+
+    /*
     cudaMemcpy(cdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
+    
+    cudaMemcpy(originalCdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToDevice);
+    
     cudaMemcpy(minimumDevice, minimum, 1 * sizeof(unsigned int), cudaMemcpyHostToDevice);
 
     calcuateMinReduction<<<gridSize,blockSize>>>(cdfDevice, minimumDevice);
 
+    */
+
     // cdf
     // cudaMemcpy(cdf, cdfDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
+    /*
     cudaMemcpy(minimum, minimumDevice, 1 * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+    scale<<<1,GRAY_LEVELS>>>(originalCdfDevice, newCdfDevice, minimumDevice, imageSizeCuda);
+
+    cudaMemcpy(newCdf, newCdfDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    */
 
     int sumOfPixles = 0;
     printf("GRAYLEVELS: %d\n", GRAY_LEVELS);
@@ -164,13 +268,16 @@ int main(int argc, char **argv){
     printf("Sum of pixels: %d\nHEIGHT x WIDTH %d\nSAME: %d\n\n",
             sumOfPixles, height * width, sumOfPixles == height * width);
 
+    /*
     printf("CDF:\n");
     for (int i = 0; i<GRAY_LEVELS; i++) {
         printf("How many px have color %d? %ld\n", i, cdf[i]);
     }
 
-    printf("\nMIN IS: %ld\n", *minimum);
-
+    printf("\nMIN IS: %ld\n\n", *minimum);
+    
+    printf("%ld\n", newCdf[0]);
+    */
     // write image (final step)
     stbi_write_jpg(argv[2], width, height, COLOR_CHANNELS, imageOut, 100);
 
@@ -179,11 +286,11 @@ int main(int argc, char **argv){
     free(imageOut);
     free(histogram);
     free(cdf);
-    free(minimum);
+    // free(minimum);
     cudaFree(imageInDevice);
     cudaFree(histogramDevice);
     cudaFree(cdfDevice);
-    cudaFree(minimumDevice);
+    // cudaFree(minimumDevice);
 
     return 0;
 }
