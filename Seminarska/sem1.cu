@@ -88,19 +88,53 @@ __global__ void calcuateMinReduction(unsigned int *cdf, unsigned int *minimum) {
 
 }
 
+__global__ void findMinGPU(unsigned int *cdf, unsigned int *min)
+{
+    int threadNumber = blockDim.x;
+    __shared__ unsigned long tmp[GRAY_LEVELS];
+
+    tmp[threadIdx.x] = cdf[threadIdx.x];
+
+    __syncthreads();
+
+    int i = threadNumber / 2;
+    while (i != 0)
+    {
+        if (threadIdx.x < i)
+        {
+            if (tmp[threadIdx.x] < tmp[threadIdx.x + i])
+            {
+                if (tmp[threadIdx.x] > 0)
+                {
+                    tmp[threadIdx.x] = tmp[threadIdx.x];
+                }
+            }
+            else
+            {
+                if (tmp[threadIdx.x + i] > 0)
+                {
+                    tmp[threadIdx.x] = tmp[threadIdx.x + i];
+                }
+            }
+        }
+        i = i / 2;
+        __syncthreads();
+    }
+}
+
 __device__ inline unsigned char scale(unsigned int cdf, unsigned int min, unsigned int imageSize) {
 
     float scale;
 
     scale = (float)(cdf - min) / (float)(imageSize - min);
 
-    scale = round(scale * (float)(GRAYLEVELS - 1));
+    scale = round(scale * (float)(GRAY_LEVELS - 1));
 
     return (int) scale;
 
 }
 
-__global__ void equalize(unsigned char *imageIn, unsigned char *imageOut, int width, int height, unsigned int *cdf, unsigned int cdfMin) {
+__global__ void equalize(unsigned char *imageIn, unsigned char *imageOut, int width, int height, unsigned int *cdf, unsigned int *cdfMin) {
 
     int x = blockIdx.x * blockDim.x + threadIdx.x,
         y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -118,7 +152,7 @@ __global__ void equalize(unsigned char *imageIn, unsigned char *imageOut, int wi
     // unsigned int cdfMin = calcuateMinReduction(localCdf);
 
     if (x < width && y < height) {
-        imageOut[y * width + x] = scale(localCdf[imageIn[y * width + x]], cdfMin, imageSize); // cdf, cdfMin, imageSize
+        imageOut[y * width + x] = scale(localCdf[imageIn[y * width + x]], *cdfMin, imageSize); // cdf, cdfMin, imageSize
     }
 
 }
@@ -134,12 +168,12 @@ int main(int argc, char **argv){
     // host variables
     int width, height, imageSizeCuda, cpp = 1;
     unsigned char *imageIn, *imageOut;
-    unsigned int *histogram, *cdf, *minimum, *newCdf;
+    unsigned int *histogram, *cdf, *minimum;
     size_t imageSize;
 
     // device variables
     unsigned char *imageInDevice, *imageOutDevice;
-    unsigned int *histogramDevice, *cdfDevice, *minimumDevice, *newCdfDevice, *originalCdfDevice;
+    unsigned int *histogramDevice, *cdfDevice, *minimumDevice;
 
     // load image from file
     if (!(imageIn = stbi_load(argv[1], &width, &height, &cpp, 1))) {
@@ -164,7 +198,7 @@ int main(int argc, char **argv){
     }
     */
 
-    // minimum = (unsigned int *) calloc(1, sizeof(unsigned int));
+    minimum = (unsigned int *) calloc(1, sizeof(unsigned int));
 
     // calculate needed size of memory for image and allocate it
     imageSizeCuda = width * height * 1; // used on GPU as lenght of array
@@ -178,35 +212,26 @@ int main(int argc, char **argv){
     cudaMalloc(&imageInDevice, imageSize);
     // histogram
     cudaMalloc(&histogramDevice, GRAY_LEVELS * sizeof(unsigned int));
-    // SET IT TO ZERO!
     cudaMemset(histogramDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
     // cdf
-    
     cudaMalloc(&cdfDevice, GRAY_LEVELS * sizeof(unsigned int));
-    // SET IT TO ZERO!
     cudaMemset(cdfDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
-    /*
     // minimum
     cudaMalloc(&minimumDevice, 1 * sizeof(unsigned int));
-    cudaMemset(minimumDevice, 0, 1 * sizeof(unsigned int));
-    // newCdf
-    cudaMalloc(&newCdfDevice, GRAY_LEVELS * sizeof(unsigned int));
-    cudaMemset(newCdfDevice, 0, GRAY_LEVELS * sizeof(unsigned int));
-    cudaMalloc(&originalCdfDevice, GRAY_LEVELS * sizeof(unsigned int));
+    // cudaMemset(minimumDevice, 0, 1 * sizeof(unsigned int));
     // imageOut
     cudaMalloc(&imageOutDevice, imageSize);
     cudaMemset(imageOutDevice, 0, imageSize);
-    */
 
     // copy data to device
     // image
     cudaMemcpy(imageInDevice, imageIn, imageSize, cudaMemcpyHostToDevice);
+    /*
     // histogram
     cudaMemcpy(histogramDevice, histogram, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
     // cdf
     cudaMemcpy(cdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
-    // newCdf
-    // cudaMemcpy(newCdfDevice, newCdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
+    */
 
     dim3 blockSize(16, 16);
     dim3 gridSize(ceil(width / blockSize.x), ceil(height / blockSize.y));
@@ -218,8 +243,10 @@ int main(int argc, char **argv){
     calculateHistogram<<<gridSize,blockSize>>>(imageInDevice, width, height, histogramDevice);
     
     parallelPrefixSum<<<1,GRAY_LEVELS>>>(histogramDevice, cdfDevice);
+
+    calcuateMinReduction<<<1,GRAY_LEVELS>>>(cdfDevice, minimumDevice);
     
-    equalize<<<gridSize,blockSize>>>(imageInDevice, imageInDevice, width, height, cdfDevice);
+    equalize<<<gridSize,blockSize>>>(imageInDevice, imageOutDevice, width, height, cdfDevice, minimumDevice);
 
     // run parallerPrexifSum
     // run calcuateMinReduction
@@ -229,13 +256,21 @@ int main(int argc, char **argv){
     // copy result from device to host
     // histogram
     cudaMemcpy(histogram, histogramDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    
-    /*
-    for (int i=1; i<GRAY_LEVELS; i++) {
-        cdf[i] = cdf[i-1] + histogram[i];
-    }
-    */
+    cudaMemcpy(minimum, minimumDevice, 1 * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(cdf, cdfDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(imageOut, imageOutDevice, imageSize, cudaMemcpyDeviceToHost);
 
+    for (int i = 0; i<GRAY_LEVELS; i++) {
+        printf("Color %d has %ld pixels\n", i, histogram[i]);
+    }
+
+    printf("\n");
+    for (int i = 0; i<GRAY_LEVELS; i++) {
+        printf("How many px have color %d? %ld\n", i, cdf[i]);
+    }
+
+    printf("\n");
+    printf("\nMIN IS: %ld\n\n", *minimum);
 
     /*
     cudaMemcpy(cdfDevice, cdf, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyHostToDevice);
@@ -259,6 +294,7 @@ int main(int argc, char **argv){
     cudaMemcpy(newCdf, newCdfDevice, GRAY_LEVELS * sizeof(unsigned int), cudaMemcpyDeviceToHost);
     */
 
+    /*
     int sumOfPixles = 0;
     printf("GRAYLEVELS: %d\n", GRAY_LEVELS);
     for (int i = 0; i<GRAY_LEVELS; i++) {
@@ -268,7 +304,6 @@ int main(int argc, char **argv){
     printf("Sum of pixels: %d\nHEIGHT x WIDTH %d\nSAME: %d\n\n",
             sumOfPixles, height * width, sumOfPixles == height * width);
 
-    /*
     printf("CDF:\n");
     for (int i = 0; i<GRAY_LEVELS; i++) {
         printf("How many px have color %d? %ld\n", i, cdf[i]);
@@ -286,11 +321,13 @@ int main(int argc, char **argv){
     free(imageOut);
     free(histogram);
     free(cdf);
-    // free(minimum);
+    free(minimum);
+
     cudaFree(imageInDevice);
+    cudaFree(imageOutDevice);
     cudaFree(histogramDevice);
     cudaFree(cdfDevice);
-    // cudaFree(minimumDevice);
+    cudaFree(minimumDevice);
 
     return 0;
 }
