@@ -14,6 +14,9 @@
 #define GRAY_LEVELS 256
 #define BLOCK_SIZE 1024
 
+// uncomment me for terminal output
+// #define DEBUG
+
 // calculate histogram
 __global__ void calculateHistogram(unsigned char *image, int width, int height, unsigned int *histogram) {
 
@@ -93,10 +96,8 @@ __global__ void calcuateMinReduction(unsigned int *cdf, unsigned int *minimum) {
 __device__ inline unsigned char scale(unsigned int cdf, unsigned int min, unsigned int imageSize) {
 
     float scale;
-
-    scale = (float)(cdf - min) / (float)(imageSize - min);
-
-    scale = round(scale * (float)(GRAY_LEVELS - 1));
+    scale = (float)(cdf - min) / (float) (imageSize - min);
+    scale = round(scale * (float) (GRAY_LEVELS - 1));
 
     return (int) scale;
 
@@ -141,6 +142,22 @@ void writeFile(char *filename, unsigned int *data) {
     }
 
 }
+void writeLineFile(char *filename, float time) {
+
+    FILE *f;
+    if (!(f = fopen(filename, "a"))) {
+        err("fopen", "could not create file")
+    }
+
+    if (fprintf(f, "%f,\n", time) < 0) {
+        err("fprintf", "could not write to file")
+    }
+
+    if (fclose(f) == EOF) {
+        err("fclose", "could not close file")
+    }
+
+}
 
 int main(int argc, char **argv){
 
@@ -154,7 +171,11 @@ int main(int argc, char **argv){
     unsigned char *imageIn, *imageOut;
     unsigned int *histogram, *cdf, *minimum;
     size_t imageSize;
-    float milliseconds = 0;
+    float millisecondsHisto,
+          millisecondsPrefixSum,
+          millisecondsMin,
+          millisecondsEq,
+          millisecondsFULL;
 
     // device variables
     unsigned char *imageInDevice, *imageOutDevice;
@@ -167,12 +188,12 @@ int main(int argc, char **argv){
     printf("Loaded image %s of size %dx%d, channels %d.\n", argv[1], width, height, cpp);
 
     // allocate memory for histogram
-    if (!(histogram = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) { // SET IT TO ZERO
+    if (!(histogram = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) {
         err("calloc", "Could not allocate memory for histogram on host")
     }
 
     // allocate memory for cdf
-    if (!(cdf = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) { // SET IT TO 0
+    if (!(cdf = (unsigned int *) calloc(GRAY_LEVELS, sizeof(unsigned int)))) {
         err("calloc", "Could not allocate memory for cdf on host")
     }
 
@@ -221,18 +242,38 @@ int main(int argc, char **argv){
 
     // compute the image histogram
     calculateHistogram<<<gridSize,blockSize>>>(imageInDevice, width, height, histogramDevice);
-    
-    // ompute the cumulative distribution of the histogram
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop); 
+    cudaEventElapsedTime(&millisecondsHisto, start, stop);
+    millisecondsFULL += millisecondsHisto;
+
+    // compute the cumulative distribution of the histogram
+    cudaEventRecord(start);
     parallelPrefixSum<<<1,GRAY_LEVELS>>>(histogramDevice, cdfDevice);
 
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop); 
+    cudaEventElapsedTime(&millisecondsPrefixSum, start, stop);
+    millisecondsFULL += millisecondsPrefixSum;
+
     // find non-zero minimum value
+    cudaEventRecord(start);
     calcuateMinReduction<<<1,GRAY_LEVELS>>>(cdfDevice, minimumDevice);
-    
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop); 
+    cudaEventElapsedTime(&millisecondsMin, start, stop);
+    millisecondsFULL += millisecondsMin;
+
     // transform the original image using the scaled cumulative distribution as the transformation function
+    cudaEventRecord(start);
     equalize<<<gridSize,blockSize>>>(imageInDevice, imageOutDevice, width, height, cdfDevice, minimumDevice);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop); 
+    cudaEventElapsedTime(&millisecondsEq, start, stop);
+    millisecondsFULL += millisecondsEq;
 
     // copy result from device to host
     // histogram
@@ -244,12 +285,15 @@ int main(int argc, char **argv){
     // image
     checkCudaErrors(cudaMemcpy(imageOut, imageOutDevice, imageSize, cudaMemcpyDeviceToHost));
 
+    #ifdef DEBUG
     for (int i = 0; i<GRAY_LEVELS; i++) {
         printf("Color %d has %ld pixels\n", i, histogram[i]);
     }
+    #endif
 
-    writeFile("histogram_old.txt", histogram);
+    // writeFile("histogram_old.txt", histogram);
 
+    #ifdef DEBUG
     printf("\n");
     for (int i = 0; i<GRAY_LEVELS; i++) {
         printf("How many px have color %d? %ld\n", i, cdf[i]);
@@ -257,6 +301,7 @@ int main(int argc, char **argv){
 
     printf("\n");
     printf("\nMIN IS: %ld\n\n", *minimum);
+    #endif
 
     // write image (final step)
     stbi_write_jpg(argv[2], width, height, COLOR_CHANNELS, imageOut, 100);
@@ -275,8 +320,9 @@ int main(int argc, char **argv){
     cudaFree(minimumDevice);
 
     // print execution time
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Kernel Execution time is: %0.3f milliseconds \n", milliseconds);
+    printf("Kernel Execution time is: %f seconds \n", millisecondsFULL / 1000.f);
+
+    writeLineFile("time.txt", millisecondsFULL / 1000.f);
 
     return 0;
 }
